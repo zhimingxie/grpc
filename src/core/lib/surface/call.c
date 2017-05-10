@@ -495,6 +495,15 @@ static void release_call(grpc_exec_ctx *exec_ctx, void *call,
 }
 
 static void set_status_value_directly(grpc_status_code status, void *dest);
+/* Shadow structure for grpc_mdelem_data for allocated elements */
+typedef struct t_allocated_metadata {
+  /* must be byte compatible with grpc_mdelem_data */
+  grpc_slice key;
+  grpc_slice value;
+
+  /* private only data */
+  gpr_atm refcnt;
+} t_allocated_metadata;
 static void destroy_call(grpc_exec_ctx *exec_ctx, void *call,
                          grpc_error *error) {
   size_t i;
@@ -502,6 +511,20 @@ static void destroy_call(grpc_exec_ctx *exec_ctx, void *call,
   grpc_call *c = call;
   GPR_TIMER_BEGIN("destroy_call", 0);
   for (i = 0; i < 2; i++) {
+      if (i == 0 &&
+              c->metadata_batch[1][i].list.head && 
+              c->metadata_batch[1][i].list.head->next == 0 && 
+              c->metadata_batch[1][i].list.count == 1) {
+          grpc_linked_mdelem *l = c->metadata_batch[1][i].list.head;
+          uintptr_t payload = l->md.payload;
+          if ((payload & 3) == 2) {
+              t_allocated_metadata * p_allocated_metadata 
+                  = (t_allocated_metadata *)(payload & ~(uintptr_t)3);
+              if (p_allocated_metadata->refcnt == 0) {
+                  continue;
+              }
+          }
+      }
     grpc_metadata_batch_destroy(
         exec_ctx, &c->metadata_batch[1 /* is_receiving */][i /* is_initial */]);
   }
