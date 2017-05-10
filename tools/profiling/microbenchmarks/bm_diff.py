@@ -56,6 +56,11 @@ _INTERESTING = (
   'writes_per_iteration',
   'atm_cas_per_iteration',
   'atm_add_per_iteration',
+  'cli_transport_stalls_per_iteration',
+  'cli_stream_stalls_per_iteration',
+  'svr_transport_stalls_per_iteration',
+  'svr_stream_stalls_per_iteration'
+  'nows_per_iteration',
 )
 
 def changed_ratio(n, o):
@@ -98,7 +103,7 @@ argp.add_argument('-t', '--track',
 argp.add_argument('-b', '--benchmarks', nargs='+', choices=_AVAILABLE_BENCHMARK_TESTS, default=['bm_cq'])
 argp.add_argument('-d', '--diff_base', type=str)
 argp.add_argument('-r', '--repetitions', type=int, default=1)
-argp.add_argument('-l', '--loops', type=int, default=12)
+argp.add_argument('-l', '--loops', type=int, default=20)
 argp.add_argument('-j', '--jobs', type=int, default=multiprocessing.cpu_count())
 args = argp.parse_args()
 
@@ -203,7 +208,10 @@ def eintr_be_gone(fn):
 
 
 def read_json(filename):
-  with open(filename) as f: return json.loads(f.read())
+  try:
+    with open(filename) as f: return json.loads(f.read())
+  except ValueError, e:
+    return None
 
 
 def finalize():
@@ -216,16 +224,18 @@ def finalize():
       js_old_ctr = read_json('%s.counters.old.%d.json' % (bm, loop))
       js_old_opt = read_json('%s.opt.old.%d.json' % (bm, loop))
 
-      for row in bm_json.expand_json(js_new_ctr, js_new_opt):
-        print row
-        name = row['cpp_name']
-        if name.endswith('_mean') or name.endswith('_stddev'): continue
-        benchmarks[name].add_sample(row, True)
-      for row in bm_json.expand_json(js_old_ctr, js_old_opt):
-        print row
-        name = row['cpp_name']
-        if name.endswith('_mean') or name.endswith('_stddev'): continue
-        benchmarks[name].add_sample(row, False)
+      if js_new_ctr:
+        for row in bm_json.expand_json(js_new_ctr, js_new_opt):
+          print row
+          name = row['cpp_name']
+          if name.endswith('_mean') or name.endswith('_stddev'): continue
+          benchmarks[name].add_sample(row, True)
+      if js_old_ctr:
+        for row in bm_json.expand_json(js_old_ctr, js_old_opt):
+          print row
+          name = row['cpp_name']
+          if name.endswith('_mean') or name.endswith('_stddev'): continue
+          benchmarks[name].add_sample(row, False)
 
   really_interesting = set()
   for name, bm in benchmarks.items():
@@ -242,9 +252,8 @@ def finalize():
     text = 'Performance differences noted:\n' + tabulate.tabulate(rows, headers=headers, floatfmt='+.2f')
   else:
     text = 'No significant performance differences'
-  comment_on_pr.comment_on_pr('```\n%s\n```' % text)
   print text
+  comment_on_pr.comment_on_pr('```\n%s\n```' % text)
 
 
 eintr_be_gone(finalize)
-

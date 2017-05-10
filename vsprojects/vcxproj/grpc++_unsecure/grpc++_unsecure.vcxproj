@@ -328,7 +328,6 @@
     <ClInclude Include="$(SolutionDir)\..\include\grpc++\impl\codegen\slice.h" />
     <ClInclude Include="$(SolutionDir)\..\include\grpc++\impl\codegen\status.h" />
     <ClInclude Include="$(SolutionDir)\..\include\grpc++\impl\codegen\status_code_enum.h" />
-    <ClInclude Include="$(SolutionDir)\..\include\grpc++\impl\codegen\status_helper.h" />
     <ClInclude Include="$(SolutionDir)\..\include\grpc++\impl\codegen\string_ref.h" />
     <ClInclude Include="$(SolutionDir)\..\include\grpc++\impl\codegen\stub_options.h" />
     <ClInclude Include="$(SolutionDir)\..\include\grpc++\impl\codegen\sync_stream.h" />
@@ -759,7 +758,7 @@
     </ClCompile>
     <ClCompile Include="$(SolutionDir)\..\src\core\lib\surface\event_string.c">
     </ClCompile>
-    <ClCompile Include="$(SolutionDir)\..\src\core\lib\surface\lame_client.c">
+    <ClCompile Include="$(SolutionDir)\..\src\core\lib\surface\lame_client.cc">
     </ClCompile>
     <ClCompile Include="$(SolutionDir)\..\src\core\lib\surface\metadata_array.c">
     </ClCompile>
