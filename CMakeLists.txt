@@ -33,11 +33,13 @@ project(${PACKAGE_NAME} C CXX)
 # Options
 option(gRPC_BUILD_TESTS "Build tests" OFF)
 
-if (NOT MSVC)
-  set(gRPC_INSTALL ON CACHE BOOL "Generate installation target")
-else()
-  set(gRPC_INSTALL OFF CACHE BOOL "Generate installation target")
+set(gRPC_INSTALL_default ON)
+if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  # Disable gRPC_INSTALL by default if building as a submodule
+  set(gRPC_INSTALL_default OFF)
 endif()
+set(gRPC_INSTALL ${gRPC_INSTALL_default} CACHE BOOL
+    "Generate installation target: gRPC_ZLIB_PROVIDER, gRPC_CARES_PROVIDER, gRPC_SSL_PROVIDER and gRPC_PROTOBUF_PROVIDER must all be \"package\"")
 
 set(gRPC_ZLIB_PROVIDER "module" CACHE STRING "Provider of zlib library")
 set_property(CACHE gRPC_ZLIB_PROVIDER PROPERTY STRINGS "module" "package")
@@ -103,6 +105,10 @@ if("${gRPC_ZLIB_PROVIDER}" STREQUAL "module")
   else()
       message(WARNING "gRPC_ZLIB_PROVIDER is \"module\" but ZLIB_ROOT_DIR is wrong")
   endif()
+  if(gRPC_INSTALL)
+    message(WARNING "gRPC_INSTALL will be forced to FALSE because gRPC_ZLIB_PROVIDER is \"module\"")
+    set(gRPC_INSTALL FALSE)
+  endif()
 elseif("${gRPC_ZLIB_PROVIDER}" STREQUAL "package")
   find_package(ZLIB)
   if(TARGET ZLIB::ZLIB)
@@ -134,12 +140,16 @@ if("${gRPC_CARES_PROVIDER}" STREQUAL "module")
   else()
     message(WARNING "gRPC_CARES_PROVIDER is \"module\" but CARES_ROOT_DIR is wrong")
   endif()
-elseif("${gRPC_CARES_PROVIDER}" STREQUAL "package")
-  find_package(CARES)
-  if(TARGET CARES::CARES)
-    set(_gRPC_CARES_LIBRARIES CARES::CARES)
+  if(gRPC_INSTALL)
+    message(WARNING "gRPC_INSTALL will be forced to FALSE because gRPC_CARES_PROVIDER is \"module\"")
+    set(gRPC_INSTALL FALSE)
   endif()
-  set(_gRPC_FIND_CARES "if(NOT CARES_FOUND)\n  find_package(CARES)\nendif()")
+elseif("${gRPC_CARES_PROVIDER}" STREQUAL "package")
+  find_package(c-ares CONFIG)
+  if(TARGET c-ares::cares)
+    set(_gRPC_CARES_LIBRARIES c-ares::cares)
+  endif()
+  set(_gRPC_FIND_CARES "if(NOT c-ares_FOUND)\n  find_package(c-ares CONFIG)\nendif()")
 endif()
 
 if("${gRPC_PROTOBUF_PROVIDER}" STREQUAL "module")
@@ -167,6 +177,10 @@ if("${gRPC_PROTOBUF_PROVIDER}" STREQUAL "module")
     endif()
   else()
       message(WARNING "gRPC_PROTOBUF_PROVIDER is \"module\" but PROTOBUF_ROOT_DIR is wrong")
+  endif()
+  if(gRPC_INSTALL)
+    message(WARNING "gRPC_INSTALL will be forced to FALSE because gRPC_PROTOBUF_PROVIDER is \"module\"")
+    set(gRPC_INSTALL FALSE)
   endif()
 elseif("${gRPC_PROTOBUF_PROVIDER}" STREQUAL "package")
   find_package(protobuf CONFIG)
@@ -200,6 +214,10 @@ if("${gRPC_SSL_PROVIDER}" STREQUAL "module")
     endif()
   else()
       message(WARNING "gRPC_SSL_PROVIDER is \"module\" but BORINGSSL_ROOT_DIR is wrong")
+  endif()
+  if(gRPC_INSTALL)
+    message(WARNING "gRPC_INSTALL will be forced to FALSE because gRPC_SSL_PROVIDER is \"module\"")
+    set(gRPC_INSTALL FALSE)
   endif()
 elseif("${gRPC_SSL_PROVIDER}" STREQUAL "package")
   find_package(OpenSSL)
@@ -304,7 +322,7 @@ function(protobuf_generate_grpc_cpp)
              "${_gRPC_PROTO_GENS_DIR}/${RELFIL_WE}_mock.grpc.pb.h"
              "${_gRPC_PROTO_GENS_DIR}/${RELFIL_WE}.pb.cc"
              "${_gRPC_PROTO_GENS_DIR}/${RELFIL_WE}.pb.h"
-      COMMAND ${_gRPC_PROTOBUF_PROTOC}
+      COMMAND $<TARGET_FILE:${_gRPC_PROTOBUF_PROTOC}>
       ARGS --grpc_out=generate_mock_code=true:${_gRPC_PROTO_GENS_DIR}
            --cpp_out=${_gRPC_PROTO_GENS_DIR}
            --plugin=protoc-gen-grpc=$<TARGET_FILE:grpc_cpp_plugin>
@@ -409,7 +427,6 @@ add_dependencies(buildtests_c gpr_host_port_test)
 add_dependencies(buildtests_c gpr_log_test)
 add_dependencies(buildtests_c gpr_mpscq_test)
 add_dependencies(buildtests_c gpr_spinlock_test)
-add_dependencies(buildtests_c gpr_stack_lockfree_test)
 add_dependencies(buildtests_c gpr_string_test)
 add_dependencies(buildtests_c gpr_sync_test)
 add_dependencies(buildtests_c gpr_thd_test)
@@ -755,7 +772,6 @@ add_library(gpr
   src/core/lib/support/log_windows.c
   src/core/lib/support/mpscq.c
   src/core/lib/support/murmur_hash.c
-  src/core/lib/support/stack_lockfree.c
   src/core/lib/support/string.c
   src/core/lib/support/string_posix.c
   src/core/lib/support/string_util_windows.c
@@ -1487,6 +1503,8 @@ target_include_directories(grpc_cronet
 target_link_libraries(grpc_cronet
   ${_gRPC_BASELIB_LIBRARIES}
   ${_gRPC_SSL_LIBRARIES}
+  ${_gRPC_ZLIB_LIBRARIES}
+  ${_gRPC_CARES_LIBRARIES}
   ${_gRPC_ALLTARGETS_LIBRARIES}
   gpr
 )
@@ -2075,6 +2093,8 @@ target_include_directories(grpc_unsecure
 
 target_link_libraries(grpc_unsecure
   ${_gRPC_BASELIB_LIBRARIES}
+  ${_gRPC_ZLIB_LIBRARIES}
+  ${_gRPC_CARES_LIBRARIES}
   ${_gRPC_ALLTARGETS_LIBRARIES}
   gpr
 )
@@ -2927,6 +2947,7 @@ target_link_libraries(grpc++_proto_reflection_desc_db
   ${_gRPC_PROTOBUF_LIBRARIES}
   ${_gRPC_ALLTARGETS_LIBRARIES}
   grpc++
+  grpc
 )
 
 foreach(_hdr
@@ -2985,6 +3006,7 @@ target_link_libraries(grpc++_reflection
   ${_gRPC_PROTOBUF_LIBRARIES}
   ${_gRPC_ALLTARGETS_LIBRARIES}
   grpc++
+  grpc
 )
 
 foreach(_hdr
@@ -3129,6 +3151,7 @@ target_link_libraries(grpc++_test_util
   ${_gRPC_ALLTARGETS_LIBRARIES}
   grpc++
   grpc_test_util
+  grpc
 )
 
 foreach(_hdr
@@ -3487,6 +3510,7 @@ target_link_libraries(grpc_cli_libs
   ${_gRPC_ALLTARGETS_LIBRARIES}
   grpc++_proto_reflection_desc_db
   grpc++
+  grpc
 )
 
 foreach(_hdr
@@ -4025,6 +4049,7 @@ target_link_libraries(qps
   grpc_test_util
   grpc++_test_util
   grpc++
+  grpc
 )
 
 
@@ -5964,35 +5989,6 @@ target_include_directories(gpr_spinlock_test
 )
 
 target_link_libraries(gpr_spinlock_test
-  ${_gRPC_ALLTARGETS_LIBRARIES}
-  gpr_test_util
-  gpr
-)
-
-endif (gRPC_BUILD_TESTS)
-if (gRPC_BUILD_TESTS)
-
-add_executable(gpr_stack_lockfree_test
-  test/core/support/stack_lockfree_test.c
-)
-
-
-target_include_directories(gpr_stack_lockfree_test
-  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
-  PRIVATE ${BORINGSSL_ROOT_DIR}/include
-  PRIVATE ${PROTOBUF_ROOT_DIR}/src
-  PRIVATE ${BENCHMARK_ROOT_DIR}/include
-  PRIVATE ${ZLIB_ROOT_DIR}
-  PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib
-  PRIVATE ${CARES_BUILD_INCLUDE_DIR}
-  PRIVATE ${CARES_INCLUDE_DIR}
-  PRIVATE ${CARES_PLATFORM_INCLUDE_DIR}
-  PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/third_party/cares/cares
-  PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/third_party/gflags/include
-)
-
-target_link_libraries(gpr_stack_lockfree_test
   ${_gRPC_ALLTARGETS_LIBRARIES}
   gpr_test_util
   gpr
@@ -9987,6 +9983,7 @@ target_link_libraries(cxx_string_ref_test
   ${_gRPC_PROTOBUF_LIBRARIES}
   ${_gRPC_ALLTARGETS_LIBRARIES}
   grpc++
+  grpc
   ${_gRPC_GFLAGS_LIBRARIES}
 )
 
@@ -14182,6 +14179,13 @@ endif (gRPC_BUILD_TESTS)
 
 
 
+
+if (gRPC_INSTALL)
+  install(EXPORT gRPCTargets
+    DESTINATION ${CMAKE_INSTALL_CMAKEDIR}
+    NAMESPACE gRPC::
+  )
+endif()
 
 foreach(_config gRPCConfig gRPCConfigVersion)
   configure_file(tools/cmake/${_config}.cmake.in
